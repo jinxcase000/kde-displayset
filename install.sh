@@ -19,13 +19,9 @@ mkdir -p "$CONFIG_DIR"
 install -m 755 "${SCRIPT_DIR}/src/kds-launch.sh" "${BIN_DIR}/kds-launch"
 install -m 644 "${SCRIPT_DIR}/src/kds-state.sh"  "${BIN_DIR}/kds-state.sh"
 
-# Install example config (don't overwrite if already exists)
-if [[ ! -f "${CONFIG_DIR}/example.conf" ]]; then
-    install -m 644 "${SCRIPT_DIR}/configs/example.conf" "${CONFIG_DIR}/example.conf"
-    echo "[kde-displayset] Example config installed to ${CONFIG_DIR}/example.conf"
-else
-    echo "[kde-displayset] Skipping example.conf — already exists at ${CONFIG_DIR}/example.conf"
-fi
+# Install example config (always refreshed — it's a reference, not a user config)
+install -m 644 "${SCRIPT_DIR}/configs/example.conf" "${CONFIG_DIR}/example.conf"
+echo "[kde-displayset] Example config refreshed at ${CONFIG_DIR}/example.conf"
 
 echo ""
 echo "[kde-displayset] Installed:"
