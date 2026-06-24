@@ -1,0 +1,10 @@
+# User configs (don't commit personal app configs)
+configs/*.conf
+!configs/example.conf
+
+# Editor temp files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
