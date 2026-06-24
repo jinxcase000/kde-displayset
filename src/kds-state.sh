@@ -17,20 +17,7 @@ kds_detect_output() {
         return 0
     fi
 
-    KDS_OUTPUT=$(kscreen-doctor --outputs 2>/dev/null \
-        | awk '/connected/ { found=1 } found && /HDMI|DP|eDP/ { print $1; exit }')
-
-    # Fallback: grab first output name from the header line
-    if [[ -z "$KDS_OUTPUT" ]]; then
-        KDS_OUTPUT=$(kscreen-doctor --outputs 2>/dev/null \
-            | awk 'NR==1 { print $2; exit }')
-    fi
-
-    if [[ -z "$KDS_OUTPUT" ]]; then
-        echo "[kds] ERROR: Could not detect a connected output. Set KDS_OUTPUT manually." >&2
-        return 1
-    fi
-
+KDS_OUTPUT=$(kscreen-doctor --outputs 2>/dev/null | awk 'NR==1 { print $3 }')
     export KDS_OUTPUT
 }
 
@@ -43,10 +30,10 @@ kds_get_state() {
     kds_detect_output || return 1
 
     local output_block
-    output_block=$(kscreen-doctor --outputs 2>/dev/null)
+    output_block=$(kscreen-doctor --outputs 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
 
     # HDR: look for "HDR: enabled" in the output block
-    if echo "$output_block" | grep -q "HDR: enabled"; then
+    if echo "$output_block" | grep -qE "^\s+HDR: enabled"; then
         KDS_HDR_CURRENT="on"
     else
         KDS_HDR_CURRENT="off"
