@@ -112,6 +112,7 @@ Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small 
 | `EXIT_VRR`    | `on` / `off` / `restore`        | `restore`    | VRR state to apply when the app exits                              |
 | `APPLY_MODE`  | `combined` / `separate`         | `combined`   | How HDR+VRR are applied when both change at once                   |
 | `HDR_SEQUENCE`| `safe` / `off`                  | `safe`       | Sequence HDR changes safely: VRR off → HDR → VRR restore           |
+| `HDR_SEQUENCE_DELAY` | integer (seconds)        | `2`          | Wait time between each step of the safe sequence                   |
 
 ### Value meanings
 

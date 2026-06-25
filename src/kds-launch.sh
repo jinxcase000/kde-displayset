@@ -178,6 +178,7 @@ load_config() {
     EXIT_VRR="restore"
     APPLY_MODE="combined"   # combined = one atomic call; separate = two calls
     HDR_SEQUENCE="safe"    # safe = VRR off → HDR → VRR restore; off = apply directly
+    HDR_SEQUENCE_DELAY=2   # seconds to wait between each step of the safe sequence
 
     # shellcheck source=/dev/null  # user config file, not statically known
     source "$CONFIG_FILE"
@@ -359,13 +360,17 @@ apply_hdr_safe() {
 
     echo "[kds] HDR_SEQUENCE safe: VRR off → HDR ${hdr_t} → VRR ${vrr_final}"
 
-    # Step 1 — disable VRR if currently on
+    local delay="${HDR_SEQUENCE_DELAY:-2}"
+
+    # Step 1 — disable VRR if currently on, then wait for display to settle
     if [[ "$cur_vrr" == "on" ]]; then
         kds_set_vrr off || echo "[kds] WARN: could not disable VRR before HDR change" >&2
+        sleep "$delay"
     fi
 
-    # Step 2 — apply HDR
+    # Step 2 — apply HDR, then wait for negotiation to complete
     kds_set_hdr "$hdr_t" || echo "[kds] WARN: HDR change failed" >&2
+    sleep "$delay"
 
     # Step 3 — apply VRR to final target
     case "$vrr_final" in
