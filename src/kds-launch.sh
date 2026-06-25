@@ -336,4 +336,10 @@ fi
 # ---------------------------------------------------------------------------
 apply_entry
 echo "[kds] Launching..."
-exec "${RUN_CMD[@]}"
+# Run as a child (NOT exec) so this script survives to run the EXIT trap
+# and restore display state when the app/game exits or crashes.
+set +e
+"${RUN_CMD[@]}"
+RUN_RC=$?
+set -e
+exit "$RUN_RC"   # triggers the EXIT trap -> apply_exit -> restore

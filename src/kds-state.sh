@@ -86,11 +86,11 @@ kds_set_vrr() {
 
     case "$state" in
         on)
-            kscreen-doctor "output.${KDS_OUTPUT}.vrr.always" 2>/dev/null
+            kscreen-doctor "output.${KDS_OUTPUT}.vrrpolicy.always" 2>/dev/null
             echo "[kds] VRR enabled (Always) on ${KDS_OUTPUT}"
             ;;
         off)
-            kscreen-doctor "output.${KDS_OUTPUT}.vrr.never" 2>/dev/null
+            kscreen-doctor "output.${KDS_OUTPUT}.vrrpolicy.never" 2>/dev/null
             echo "[kds] VRR disabled on ${KDS_OUTPUT}"
             ;;
         *)
