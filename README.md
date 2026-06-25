@@ -110,6 +110,7 @@ Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small 
 | `ENTRY_VRR`   | `on` / `off` / `passthrough`    | `passthrough`| VRR state to apply when the app launches                           |
 | `EXIT_HDR`    | `on` / `off` / `restore`        | `restore`    | HDR state to apply when the app exits                              |
 | `EXIT_VRR`    | `on` / `off` / `restore`        | `restore`    | VRR state to apply when the app exits                              |
+| `APPLY_MODE`  | `combined` / `separate`         | `combined`   | How HDR+VRR are applied when both change at once                   |
 | `COMMAND`     | Any valid shell command         | *(optional)* | Only for standalone use; with `%command%` Steam provides the command |
 
 ### Value meanings
@@ -119,6 +120,15 @@ Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small 
 - **`restore`** (exit only) — On exit, set this back to whatever it was *before* the app launched. Resolved at launch time, so it always reflects your true pre-launch state.
 
 > `VRR = on` maps to KWin's **Always** mode (not Automatic) — chosen deliberately so adaptive sync doesn't flip on and off mid-game.
+
+### APPLY_MODE
+
+When a launch (or exit) changes **both** HDR and VRR at once, `APPLY_MODE` controls how:
+
+- **`combined`** (default) — both settings go in a single atomic `kscreen-doctor` call, so the display re-negotiates once. Faster (~2–3× on measured dual changes) and usually fewer/shorter blinks.
+- **`separate`** — HDR and VRR are applied in two distinct calls, one after the other. Some games or panels negotiate more reliably one-at-a-time; use this if `combined` misbehaves.
+
+This only matters when both change together — a single-setting change is one call either way.
 
 ### Example configs
 

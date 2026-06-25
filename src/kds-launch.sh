@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-KDS_VERSION="1.1.1"
+KDS_VERSION="1.2.0"
 KDS_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/kde-displayset"
 KDS_STATE_LIB="$(dirname "$(realpath "$0")")/kds-state.sh"
 
@@ -177,6 +177,7 @@ load_config() {
     EXIT_HDR="restore"
     EXIT_VRR="restore"
     COMMAND=""
+    APPLY_MODE="combined"   # combined = one atomic call; separate = two calls
 
     # shellcheck source=/dev/null  # user config file, not statically known
     source "$CONFIG_FILE"
@@ -288,24 +289,56 @@ echo "[kds] Exit settings  — HDR: ${EXIT_HDR}  VRR: ${EXIT_VRR}"
 [[ "$EXIT_VRR" == "restore" ]] && EXIT_VRR="$SNAPSHOT_VRR"
 
 # ---------------------------------------------------------------------------
+# apply_targets <hdr:on|off|skip> <vrr:on|off|skip>
+#   Applies resolved targets honoring APPLY_MODE:
+#     combined (default) -> one atomic kscreen-doctor call (kds_apply)
+#     separate           -> HDR then VRR in two distinct calls
+#   For a single-setting change both modes are identical (one call).
+# ---------------------------------------------------------------------------
+apply_targets() {
+    local h="$1" v="$2" mode="${APPLY_MODE:-combined}"
+    case "$mode" in
+        combined|separate) ;;
+        *) echo "[kds] WARN: unknown APPLY_MODE='${mode}', using 'combined'" >&2; mode="combined" ;;
+    esac
+
+    local rc=0
+    if [[ "$mode" == "separate" ]]; then
+        if [[ "$h" != "skip" ]]; then kds_set_hdr "$h" || rc=1; fi
+        if [[ "$v" != "skip" ]]; then kds_set_vrr "$v" || rc=1; fi
+    else
+        kds_apply "$h" "$v" || rc=1
+    fi
+    return $rc
+}
+
+# ---------------------------------------------------------------------------
 # Apply entry state
 # ---------------------------------------------------------------------------
 apply_entry() {
+    local hdr_t="skip" vrr_t="skip"
+
     if [[ "$ENTRY_HDR" == "passthrough" || "$ENTRY_HDR" == "$SNAPSHOT_HDR" ]]; then
         echo "[kds] HDR: no change needed (${ENTRY_HDR})"
-    elif [[ $DRY_RUN -eq 1 ]]; then
-        echo "[kds] DRY-RUN: would set HDR to ${ENTRY_HDR}"
     else
-        kds_set_hdr "$ENTRY_HDR"
+        hdr_t="$ENTRY_HDR"
     fi
 
     if [[ "$ENTRY_VRR" == "passthrough" || "$ENTRY_VRR" == "$SNAPSHOT_VRR" ]]; then
         echo "[kds] VRR: no change needed (${ENTRY_VRR})"
-    elif [[ $DRY_RUN -eq 1 ]]; then
-        echo "[kds] DRY-RUN: would set VRR to ${ENTRY_VRR}"
     else
-        kds_set_vrr "$ENTRY_VRR"
+        vrr_t="$ENTRY_VRR"
     fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        if [[ "$hdr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set HDR to ${hdr_t}"; fi
+        if [[ "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set VRR to ${vrr_t}"; fi
+        if [[ "$hdr_t" != "skip" && "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: apply mode = ${APPLY_MODE:-combined}"; fi
+        return 0
+    fi
+
+    # Apply resolved targets (honors APPLY_MODE); never block the launch if it fails.
+    apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: entry display settings failed to apply (continuing)" >&2
 }
 
 # ---------------------------------------------------------------------------
@@ -324,15 +357,19 @@ apply_exit() {
         return 0
     fi
 
-    # Independent restores — a failure in one must never skip the other.
+    # Resolve exit targets — only on/off are applied; anything else is left as-is.
+    local hdr_t="skip" vrr_t="skip"
     case "$EXIT_HDR" in
-        on|off) kds_set_hdr "$EXIT_HDR" || echo "[kds] WARN: HDR restore to ${EXIT_HDR} failed" >&2 ;;
+        on|off) hdr_t="$EXIT_HDR" ;;
         *)      echo "[kds] HDR: left unchanged on exit (${EXIT_HDR})" ;;
     esac
     case "$EXIT_VRR" in
-        on|off) kds_set_vrr "$EXIT_VRR" || echo "[kds] WARN: VRR restore to ${EXIT_VRR} failed" >&2 ;;
+        on|off) vrr_t="$EXIT_VRR" ;;
         *)      echo "[kds] VRR: left unchanged on exit (${EXIT_VRR})" ;;
     esac
+
+    # Restore resolved targets (honors APPLY_MODE).
+    apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: one or more exit settings failed to apply" >&2
     echo "[kds] Done."
 }
 
