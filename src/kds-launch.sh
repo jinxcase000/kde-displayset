@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-KDS_VERSION="1.1.0"
+KDS_VERSION="1.1.1"
 KDS_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/kde-displayset"
 KDS_STATE_LIB="$(dirname "$(realpath "$0")")/kds-state.sh"
 
@@ -307,18 +307,30 @@ apply_entry() {
 # Apply exit state
 # ---------------------------------------------------------------------------
 apply_exit() {
+    # Idempotency guard: EXIT plus a signal trap could both fire.
+    [[ "${_KDS_EXIT_DONE:-0}" -eq 1 ]] && return 0
+    _KDS_EXIT_DONE=1
+
     echo "[kds] Applying exit state — HDR: ${EXIT_HDR}  VRR: ${EXIT_VRR}"
     if [[ $DRY_RUN -eq 1 ]]; then
         echo "[kds] DRY-RUN: would set HDR to ${EXIT_HDR}"
         echo "[kds] DRY-RUN: would set VRR to ${EXIT_VRR}"
-    else
-        kds_set_hdr "$EXIT_HDR"
-        kds_set_vrr "$EXIT_VRR"
+        return 0
     fi
+
+    # Independent restores — a failure in one must never skip the other.
+    case "$EXIT_HDR" in
+        on|off) kds_set_hdr "$EXIT_HDR" || echo "[kds] WARN: HDR restore to ${EXIT_HDR} failed" >&2 ;;
+        *)      echo "[kds] HDR: left unchanged on exit (${EXIT_HDR})" ;;
+    esac
+    case "$EXIT_VRR" in
+        on|off) kds_set_vrr "$EXIT_VRR" || echo "[kds] WARN: VRR restore to ${EXIT_VRR} failed" >&2 ;;
+        *)      echo "[kds] VRR: left unchanged on exit (${EXIT_VRR})" ;;
+    esac
     echo "[kds] Done."
 }
 
-trap apply_exit EXIT
+trap apply_exit EXIT INT TERM
 
 # ---------------------------------------------------------------------------
 # Dry run exit

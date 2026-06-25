@@ -59,20 +59,34 @@ kds_set_hdr() {
     local state="$1"
     kds_detect_output || return 1
 
+    local action want
     case "$state" in
-        on)
-            kscreen-doctor "output.${KDS_OUTPUT}.hdr.enable" 2>/dev/null
-            echo "[kds] HDR enabled on ${KDS_OUTPUT}"
-            ;;
-        off)
-            kscreen-doctor "output.${KDS_OUTPUT}.hdr.disable" 2>/dev/null
-            echo "[kds] HDR disabled on ${KDS_OUTPUT}"
-            ;;
+        on)  action="hdr.enable";  want="on"  ;;
+        off) action="hdr.disable"; want="off" ;;
         *)
             echo "[kds] ERROR: kds_set_hdr requires 'on' or 'off', got: $state" >&2
             return 1
             ;;
     esac
+
+    # Apply, capturing kscreen-doctor output (it exits 0 even on parse errors).
+    local out
+    out=$(kscreen-doctor "output.${KDS_OUTPUT}.${action}" 2>&1)
+
+    # Verify by reading back (local read; does not touch snapshot vars).
+    local now
+    if kscreen-doctor --outputs 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -qE "^\s+HDR: enabled"; then
+        now="on"
+    else
+        now="off"
+    fi
+
+    if [[ "$now" == "$want" ]]; then
+        echo "[kds] HDR set to ${want} on ${KDS_OUTPUT}"
+        return 0
+    fi
+    echo "[kds] ERROR: HDR set to ${want} did not take on ${KDS_OUTPUT} (now: ${now}). kscreen-doctor: ${out:-<no output>}" >&2
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -84,18 +98,32 @@ kds_set_vrr() {
     local state="$1"
     kds_detect_output || return 1
 
+    local action want
     case "$state" in
-        on)
-            kscreen-doctor "output.${KDS_OUTPUT}.vrrpolicy.always" 2>/dev/null
-            echo "[kds] VRR enabled (Always) on ${KDS_OUTPUT}"
-            ;;
-        off)
-            kscreen-doctor "output.${KDS_OUTPUT}.vrrpolicy.never" 2>/dev/null
-            echo "[kds] VRR disabled on ${KDS_OUTPUT}"
-            ;;
+        on)  action="vrrpolicy.always"; want="on"  ;;
+        off) action="vrrpolicy.never";  want="off" ;;
         *)
             echo "[kds] ERROR: kds_set_vrr requires 'on' or 'off', got: $state" >&2
             return 1
             ;;
     esac
+
+    # Apply, capturing kscreen-doctor output (it exits 0 even on parse errors).
+    local out
+    out=$(kscreen-doctor "output.${KDS_OUTPUT}.${action}" 2>&1)
+
+    # Verify by reading back (local read; does not touch snapshot vars).
+    local now
+    if kscreen-doctor --outputs 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -i "Vrr:" | grep -qiE "Always|Automatic"; then
+        now="on"
+    else
+        now="off"
+    fi
+
+    if [[ "$now" == "$want" ]]; then
+        echo "[kds] VRR set to ${want} (${action}) on ${KDS_OUTPUT}"
+        return 0
+    fi
+    echo "[kds] ERROR: VRR set to ${want} did not take on ${KDS_OUTPUT} (now: ${now}). kscreen-doctor: ${out:-<no output>}" >&2
+    return 1
 }
