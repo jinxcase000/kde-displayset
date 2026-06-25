@@ -22,6 +22,7 @@ if [[ ! -f "$KDS_STATE_LIB" ]]; then
     exit 1
 fi
 
+# shellcheck source=/dev/null  # resolved at runtime from the install path
 source "$KDS_STATE_LIB"
 
 # ---------------------------------------------------------------------------
@@ -163,6 +164,9 @@ find_config_by_launcher() {
 # ---------------------------------------------------------------------------
 # Load and validate a config file
 # ---------------------------------------------------------------------------
+# NAME/LAUNCHER/LAUNCHER_ID are config-schema defaults; the launcher detector
+# reads them by scanning the config files, not as shell variables here.
+# shellcheck disable=SC2034
 load_config() {
     # Defaults
     NAME=""
@@ -174,6 +178,7 @@ load_config() {
     EXIT_VRR="restore"
     COMMAND=""
 
+    # shellcheck source=/dev/null  # user config file, not statically known
     source "$CONFIG_FILE"
 }
 
@@ -208,7 +213,7 @@ if [[ "$SELF" == kds-launch=* ]]; then
     MODE="forced"
     PASSTHROUGH_CMD=("$@")
 elif [[ "$FIRST" == /* || "$FIRST" == ./* || "$FIRST" == *" "* ]] || \
-     ( [[ $# -gt 1 ]] && [[ "$2" == /* || "$2" == env || "$2" == /usr/* ]] ); then
+     { [[ $# -gt 1 ]] && [[ "$2" == /* || "$2" == env || "$2" == /usr/* ]]; }; then
     # Looks like %command% was passed (first arg is a path or env)
     MODE="auto"
     PASSTHROUGH_CMD=("$@")
@@ -306,6 +311,7 @@ apply_entry() {
 # ---------------------------------------------------------------------------
 # Apply exit state
 # ---------------------------------------------------------------------------
+# shellcheck disable=SC2329  # invoked indirectly via 'trap apply_exit EXIT INT TERM'
 apply_exit() {
     # Idempotency guard: EXIT plus a signal trap could both fire.
     [[ "${_KDS_EXIT_DONE:-0}" -eq 1 ]] && return 0
