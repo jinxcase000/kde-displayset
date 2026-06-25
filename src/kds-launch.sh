@@ -82,7 +82,10 @@ list_configs() {
         echo "  ${fname}  —  ${display}${meta}"
         found=1
     done
-    [[ $found -eq 0 ]] && echo "  (none found — copy example.conf to get started)"
+    if [[ $found -eq 0 ]]; then
+        echo "  (none found — copy example.conf to get started)"
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
