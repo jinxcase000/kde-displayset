@@ -177,7 +177,7 @@ load_config() {
     EXIT_HDR="restore"
     EXIT_VRR="restore"
     APPLY_MODE="combined"   # combined = one atomic call; separate = two calls
-    HDR_SEQUENCE="safe"    # safe = VRR off → HDR → VRR restore; off = apply directly
+    HDR_SEQUENCE="off"     # safe = VRR off → HDR → VRR restore; off = apply directly
     HDR_SEQUENCE_DELAY=2   # seconds to wait between each step of the safe sequence
 
     # shellcheck source=/dev/null  # user config file, not statically known
