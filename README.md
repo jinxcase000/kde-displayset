@@ -4,7 +4,7 @@ A lightweight, state-aware display settings launcher for KDE Plasma on Wayland.
 
 Automatically sets HDR and Adaptive Sync (VRR/G-Sync/FreeSync) to the right state when an app or game launches, and restores (or sets) them to a defined state when it exits — without touching settings you didn't ask it to change.
 
-Built for KDE Plasma 6 + Wayland. Tested on CachyOS with Nvidia RTX series.
+Built for KDE Plasma 6 + Wayland. Developed and tested on CachyOS, KDE Plasma 6.7, Nvidia RTX series.
 
 ---
 
@@ -12,13 +12,13 @@ Built for KDE Plasma 6 + Wayland. Tested on CachyOS with Nvidia RTX series.
 
 KDE Plasma doesn't auto-toggle HDR or VRR per-application. If you want HDR off at the desktop but on for games, or VRR on only when gaming, you'd normally have to do it manually every time. This tool automates that.
 
-It's also non-destructive: it snapshots your current state before doing anything, so `restore` on exit always brings you back to exactly where you were — even if HDR was already on when you launched.
+It's also non-destructive: it snapshots your current state before doing anything, so `restore` on exit always brings you back to exactly where you were — even if HDR was already on when you launched. Every change is verified by reading the state back, so a setting that fails to apply is reported rather than silently assumed.
 
 ---
 
 ## Requirements
 
-- KDE Plasma 6 on Wayland
+- KDE Plasma 6 on Wayland (VRR is set via Plasma's `vrrpolicy`; developed against Plasma 6.7)
 - `kscreen-doctor` — part of the `kscreen` package
   ```
   sudo pacman -S kscreen       # Arch / CachyOS / Manjaro
@@ -37,7 +37,7 @@ cd kde-displayset
 bash install.sh
 ```
 
-Scripts are installed to `~/.local/bin/` and configs go to `~/.config/kde-displayset/`. No root required.
+Scripts are installed to `~/.local/bin/` and configs go to `~/.config/kde-displayset/`. No root required. The example config is refreshed on every install; your own `*.conf` files are never touched.
 
 If `~/.local/bin` isn't in your `$PATH`, the installer will warn you and tell you how to add it for your shell.
 
@@ -51,71 +51,105 @@ If `~/.local/bin` isn't in your `$PATH`, the installer will warn you and tell yo
    nano ~/.config/kde-displayset/stalker2.conf
    ```
 
-2. Set your desired entry/exit states and the launch command (see [Config Reference](#config-reference) below).
+2. Set your desired entry/exit states (see [Config Reference](#config-reference)). For a Steam game, add `LAUNCHER="steam"` and `LAUNCHER_ID="<AppID>"` so it can be auto-detected.
 
-3. Test it without applying anything:
+3. Preview without changing anything:
    ```bash
    kds-launch stalker2 --dry-run
    ```
 
-4. Launch it for real:
-   ```bash
-   kds-launch stalker2
+4. Use it with Steam — set the game's Launch Options to:
    ```
+   kds-launch %command%
+   ```
+   With `LAUNCHER`/`LAUNCHER_ID` set in the config, kds-launch auto-detects which config to use from Steam's environment, applies your entry state, runs the game, and restores on exit. See [Using with Steam](#using-with-steam-launch-options).
 
-5. To use with Steam, set the Steam launch options for the game to:
-   ```
-   kds-launch stalker2 %command%
-   ```
-   > **Note:** When using `%command%`, Steam passes the game's own launch arguments via `%command%`. Set `COMMAND="%command%"` in your config, or omit COMMAND entirely and let Steam handle the launch — see the Steam section below.
+---
+
+## Usage
+
+```
+kds-launch %command%              Auto-detect config from launcher env vars, then run %command%
+kds-launch=myapp %command%        Force the 'myapp' config, then run %command%
+kds-launch myapp                  Standalone: load myapp.conf and run its COMMAND
+kds-launch --list                 List all configs
+kds-launch --status               Show current HDR and VRR state
+kds-launch --help                 Show help
+```
+
+Append `--dry-run` to any launch invocation to preview what would happen without changing anything.
+
+### How a config is matched
+
+**With `%command%` (Steam/Heroic auto-detect):**
+
+1. Filename match — `<SteamAppId>.conf` or `<HEROIC_APP_NAME>.conf`.
+2. Field scan — any config whose `LAUNCHER` + `LAUNCHER_ID` match the launcher's environment.
+3. No match — the command is passed through untouched (your game still launches; nothing is changed).
+
+**Standalone (`kds-launch myapp`):**
+
+1. Filename match — `myapp.conf`.
+2. `NAME` field scan — any config whose `NAME` equals `myapp` (case-insensitive).
+3. No match — error.
+
+Supported launcher environment variables: `steam` → `SteamAppId`, `heroic` → `HEROIC_APP_NAME`.
 
 ---
 
 ## Config Reference
 
-Config files live at `~/.config/kde-displayset/<appname>.conf`.
+Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small Bash file of `KEY="value"` lines.
 
-| Variable    | Values                        | Default       | Description                                      |
-|-------------|-------------------------------|---------------|--------------------------------------------------|
-| `ENTRY_HDR` | `on` / `off` / `passthrough`  | `passthrough` | HDR state to apply when the app launches         |
-| `ENTRY_VRR` | `on` / `off` / `passthrough`  | `passthrough` | VRR state to apply when the app launches         |
-| `EXIT_HDR`  | `on` / `off` / `restore`      | `restore`     | HDR state to apply when the app exits            |
-| `EXIT_VRR`  | `on` / `off` / `restore`      | `restore`     | VRR state to apply when the app exits            |
-| `COMMAND`   | Any valid shell command        | *(required)*  | The command to launch your app                   |
+| Variable      | Values                          | Default      | Description                                                        |
+|---------------|---------------------------------|--------------|--------------------------------------------------------------------|
+| `NAME`        | Any string                      | *(filename)* | Human-readable name shown in `--list`                              |
+| `LAUNCHER`    | `steam` / `heroic` / `none`     | *(unset)*    | Launcher type, for `%command%` auto-detection                      |
+| `LAUNCHER_ID` | AppID / launcher-specific ID    | *(unset)*    | Matched against the launcher's env var (e.g. Steam AppID)          |
+| `ENTRY_HDR`   | `on` / `off` / `passthrough`    | `passthrough`| HDR state to apply when the app launches                           |
+| `ENTRY_VRR`   | `on` / `off` / `passthrough`    | `passthrough`| VRR state to apply when the app launches                           |
+| `EXIT_HDR`    | `on` / `off` / `restore`        | `restore`    | HDR state to apply when the app exits                              |
+| `EXIT_VRR`    | `on` / `off` / `restore`        | `restore`    | VRR state to apply when the app exits                              |
+| `COMMAND`     | Any valid shell command         | *(optional)* | Only for standalone use; with `%command%` Steam provides the command |
 
 ### Value meanings
 
-- **`passthrough`** — Don't touch this setting at all on entry. Leave it exactly as it is.
-- **`restore`** — On exit, set this back to whatever it was *before* the app launched.
-- **`on`** / **`off`** — Explicitly set to that state, regardless of what it was before.
+- **`on`** / **`off`** — Explicitly set to that state.
+- **`passthrough`** (entry only) — Don't touch this setting on launch; leave it exactly as it is.
+- **`restore`** (exit only) — On exit, set this back to whatever it was *before* the app launched. Resolved at launch time, so it always reflects your true pre-launch state.
+
+> `VRR = on` maps to KWin's **Always** mode (not Automatic) — chosen deliberately so adaptive sync doesn't flip on and off mid-game.
 
 ### Example configs
 
-**Game that needs HDR and VRR, restore everything on exit:**
+**Steam game, auto-detected via `%command%` — HDR + VRR on, restore on exit:**
+```bash
+NAME="STALKER 2"
+LAUNCHER="steam"
+LAUNCHER_ID="1643380"
+ENTRY_HDR="on"
+ENTRY_VRR="on"
+EXIT_HDR="restore"
+EXIT_VRR="restore"
+```
+
+**Minimal Steam config (filename is the AppID, e.g. `1643380.conf`):**
 ```bash
 ENTRY_HDR="on"
 ENTRY_VRR="on"
 EXIT_HDR="restore"
 EXIT_VRR="restore"
-COMMAND="steam steam://rungameid/1643380"
 ```
 
-**Media player — HDR on, leave VRR alone, turn HDR off when done:**
+**Standalone media player — HDR on, leave VRR alone, HDR off when done:**
 ```bash
+NAME="mpv"
+LAUNCHER="none"
 ENTRY_HDR="on"
 ENTRY_VRR="passthrough"
 EXIT_HDR="off"
 EXIT_VRR="passthrough"
 COMMAND="mpv --fullscreen /home/jinx/movies/mymovie.mkv"
-```
-
-**Game that doesn't need HDR, but does need VRR:**
-```bash
-ENTRY_HDR="off"
-ENTRY_VRR="on"
-EXIT_HDR="restore"
-EXIT_VRR="restore"
-COMMAND="steam steam://rungameid/292030"
 ```
 
 ---
@@ -125,39 +159,29 @@ COMMAND="steam steam://rungameid/292030"
 In Steam → right-click game → Properties → Launch Options:
 
 ```
-kds-launch mygame %command%
+kds-launch %command%
 ```
 
-When used this way, Steam passes the real game command via `%command%`. Set your config's `COMMAND` to a Steam game URI instead, and use the launch options field just to invoke `kds-launch` before Steam handles the rest. Or simply wrap the whole launch:
+Steam passes the real game command through `%command%`. kds-launch auto-detects the matching config from `SteamAppId` (set `LAUNCHER="steam"` and `LAUNCHER_ID="<AppID>"` in the config, or name the config file `<AppID>.conf`), applies your entry state, runs the game, and restores on exit.
+
+To force a specific config regardless of environment, use the `=name` form:
 
 ```
-kds-launch mygame
+kds-launch=stalker2 %command%
 ```
 
-And set `COMMAND="steam steam://rungameid/<AppID>"` in the config — Steam will launch the game via URI and kds-launch will wait for it to exit before restoring settings.
-
----
-
-## CLI Reference
-
-```
-kds-launch <config-name>            Launch app using named config
-kds-launch <config-name> --dry-run  Show what would happen without doing it
-kds-launch --list                   List all available configs
-kds-launch --status                 Show current HDR and VRR state
-kds-launch --help                   Show help
-```
+If no config matches, kds-launch passes the command through untouched — the game still launches, nothing is changed.
 
 ---
 
 ## How It Works
 
-1. `kds-launch` sources `kds-state.sh` to get the state detection functions.
-2. It reads your `.conf` file to get entry/exit states and the command.
-3. It snapshots current HDR and VRR state via `kscreen-doctor`.
-4. It applies only the settings that need to change on entry.
-5. It launches your app and waits for it to exit.
-6. On exit (including crashes, via `trap`), it applies your defined exit state.
+1. `kds-launch` sources `kds-state.sh` for the state detection/apply functions.
+2. It resolves which config to use (see [matching](#how-a-config-is-matched)) and loads your entry/exit settings.
+3. It snapshots current HDR and VRR via `kscreen-doctor`, and resolves any `restore` values against that snapshot.
+4. It applies only the settings that need to change on entry, verifying each by reading the state back.
+5. It runs your app as a child process and waits for it to exit.
+6. On exit — clean exit, crash, or termination (`EXIT`, `INT`, `TERM` traps) — it applies your defined exit state. HDR and VRR are restored independently, so a failure in one never blocks the other.
 
 The `restore` exit value is resolved at snapshot time, so it always reflects what was active *before* kds-launch ran — not what's active at the moment of exit.
 
