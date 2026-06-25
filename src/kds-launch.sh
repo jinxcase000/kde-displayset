@@ -177,6 +177,7 @@ load_config() {
     EXIT_HDR="restore"
     EXIT_VRR="restore"
     APPLY_MODE="combined"   # combined = one atomic call; separate = two calls
+    HDR_SEQUENCE="safe"    # safe = VRR off → HDR → VRR restore; off = apply directly
 
     # shellcheck source=/dev/null  # user config file, not statically known
     source "$CONFIG_FILE"
@@ -344,6 +345,36 @@ apply_targets() {
 }
 
 # ---------------------------------------------------------------------------
+# apply_hdr_safe <hdr_target> <vrr_target> <current_vrr>
+#   Safe HDR sequence for displays that reject HDR changes while VRR is active.
+#   Sequence: VRR off → HDR to target → VRR to target.
+#   hdr_target : on | off        (never "skip" — caller checks before calling)
+#   vrr_target : on | off | skip (skip = keep VRR at current_vrr)
+#   current_vrr: on | off        (live VRR state at the time of this call)
+# ---------------------------------------------------------------------------
+apply_hdr_safe() {
+    local hdr_t="$1" vrr_t="$2" cur_vrr="$3"
+    local vrr_final="$vrr_t"
+    [[ "$vrr_final" == "skip" ]] && vrr_final="$cur_vrr"
+
+    echo "[kds] HDR_SEQUENCE safe: VRR off → HDR ${hdr_t} → VRR ${vrr_final}"
+
+    # Step 1 — disable VRR if currently on
+    if [[ "$cur_vrr" == "on" ]]; then
+        kds_set_vrr off || echo "[kds] WARN: could not disable VRR before HDR change" >&2
+    fi
+
+    # Step 2 — apply HDR
+    kds_set_hdr "$hdr_t" || echo "[kds] WARN: HDR change failed" >&2
+
+    # Step 3 — apply VRR to final target
+    case "$vrr_final" in
+        on)  kds_set_vrr on || echo "[kds] WARN: could not restore VRR after HDR change" >&2 ;;
+        off) : ;;   # already off from step 1, or was never on
+    esac
+}
+
+# ---------------------------------------------------------------------------
 # Apply entry state
 # ---------------------------------------------------------------------------
 apply_entry() {
@@ -362,14 +393,24 @@ apply_entry() {
     fi
 
     if [[ $DRY_RUN -eq 1 ]]; then
-        if [[ "$hdr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set HDR to ${hdr_t}"; fi
-        if [[ "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set VRR to ${vrr_t}"; fi
-        if [[ "$hdr_t" != "skip" && "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: apply mode = ${APPLY_MODE:-combined}"; fi
+        if [[ "${HDR_SEQUENCE:-safe}" == "safe" && "$hdr_t" != "skip" ]]; then
+            local vrr_preview="$vrr_t"; [[ "$vrr_preview" == "skip" ]] && vrr_preview="$SNAPSHOT_VRR"
+            echo "[kds] DRY-RUN: HDR_SEQUENCE safe: VRR off → HDR ${hdr_t} → VRR ${vrr_preview}"
+        else
+            if [[ "$hdr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set HDR to ${hdr_t}"; fi
+            if [[ "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: would set VRR to ${vrr_t}"; fi
+            if [[ "$hdr_t" != "skip" && "$vrr_t" != "skip" ]]; then echo "[kds] DRY-RUN: apply mode = ${APPLY_MODE:-combined}"; fi
+        fi
         return 0
     fi
 
-    # Apply resolved targets (honors APPLY_MODE); never block the launch if it fails.
-    apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: entry display settings failed to apply (continuing)" >&2
+    # Apply resolved targets; use safe HDR sequence if HDR is changing.
+    if [[ "${HDR_SEQUENCE:-safe}" == "safe" && "$hdr_t" != "skip" ]]; then
+        apply_hdr_safe "$hdr_t" "$vrr_t" "$SNAPSHOT_VRR" \
+            || echo "[kds] WARN: entry display settings failed to apply (continuing)" >&2
+    else
+        apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: entry display settings failed to apply (continuing)" >&2
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -399,8 +440,20 @@ apply_exit() {
         *)      echo "[kds] VRR: left unchanged on exit (${EXIT_VRR})" ;;
     esac
 
-    # Restore resolved targets (honors APPLY_MODE).
-    apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: one or more exit settings failed to apply" >&2
+    # Apply exit targets; use safe HDR sequence if HDR is changing.
+    if [[ "${HDR_SEQUENCE:-safe}" == "safe" && "$hdr_t" != "skip" ]]; then
+        # Infer live VRR state: it was set by entry settings
+        local exit_cur_vrr
+        case "$ENTRY_VRR" in
+            on|off)      exit_cur_vrr="$ENTRY_VRR" ;;
+            passthrough) exit_cur_vrr="$SNAPSHOT_VRR" ;;
+            *)           exit_cur_vrr="$SNAPSHOT_VRR" ;;
+        esac
+        apply_hdr_safe "$hdr_t" "$vrr_t" "$exit_cur_vrr" \
+            || echo "[kds] WARN: one or more exit settings failed to apply" >&2
+    else
+        apply_targets "$hdr_t" "$vrr_t" || echo "[kds] WARN: one or more exit settings failed to apply" >&2
+    fi
     echo "[kds] Done."
 }
 

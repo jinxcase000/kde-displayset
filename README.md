@@ -111,6 +111,7 @@ Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small 
 | `EXIT_HDR`    | `on` / `off` / `restore`        | `restore`    | HDR state to apply when the app exits                              |
 | `EXIT_VRR`    | `on` / `off` / `restore`        | `restore`    | VRR state to apply when the app exits                              |
 | `APPLY_MODE`  | `combined` / `separate`         | `combined`   | How HDR+VRR are applied when both change at once                   |
+| `HDR_SEQUENCE`| `safe` / `off`                  | `safe`       | Sequence HDR changes safely: VRR off → HDR → VRR restore           |
 
 ### Value meanings
 
@@ -218,3 +219,23 @@ GPL-3.0 — free to use, modify, and share. Any derivative work must also be ope
 ## Contributing
 
 Issues and PRs welcome at https://github.com/jinxcase000/kde-displayset
+
+---
+
+## FAQ
+
+### HDR isn't activating — my display flashes but doesn't enter HDR mode
+
+This is a negotiation quirk seen on some older TVs and monitors. When VRR (adaptive sync) is already active, certain displays reject an HDR mode change during the same negotiation cycle — they flash but land back in SDR.
+
+The fix is `HDR_SEQUENCE="safe"` in your config, which is the default. It sequences the changes as: VRR off → HDR on → VRR on, giving the display two clean re-negotiations instead of one ambiguous one.
+
+If you've explicitly set `HDR_SEQUENCE="off"` and are seeing this issue, change it back to `"safe"`.
+
+**Known affected displays:**
+
+| Year | Brand   | Model       | Notes                              |
+|------|---------|-------------|------------------------------------|
+| 2020 | Samsung | QN55Q80T    | Requires `HDR_SEQUENCE="safe"`     |
+
+If your display has this issue, please open an issue or PR at https://github.com/jinxcase000/kde-displayset with your year, brand, and model so it can be added to this list. Over time the goal is to build a database of affected panels and potentially auto-detect them during install.
