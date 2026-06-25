@@ -9,3 +9,7 @@ configs/*.conf
 .vscode/
 .idea/
 please_read.memory
+
+# Claude (Cowork) collaboration — local only, not part of the project
+CLAUDE.md
+claude-activity.log
