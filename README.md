@@ -71,7 +71,7 @@ If `~/.local/bin` isn't in your `$PATH`, the installer will warn you and tell yo
 ```
 kds-launch %command%              Auto-detect config from launcher env vars, then run %command%
 kds-launch=myapp %command%        Force the 'myapp' config, then run %command%
-kds-launch myapp                  Standalone: load myapp.conf and run its COMMAND
+kds-launch myapp                  Standalone: load myapp.conf, auto-generate launch command
 kds-launch --list                 List all configs
 kds-launch --status               Show current HDR and VRR state
 kds-launch --help                 Show help
@@ -111,7 +111,6 @@ Config files live at `~/.config/kde-displayset/<appname>.conf`. Each is a small 
 | `EXIT_HDR`    | `on` / `off` / `restore`        | `restore`    | HDR state to apply when the app exits                              |
 | `EXIT_VRR`    | `on` / `off` / `restore`        | `restore`    | VRR state to apply when the app exits                              |
 | `APPLY_MODE`  | `combined` / `separate`         | `combined`   | How HDR+VRR are applied when both change at once                   |
-| `COMMAND`     | Any valid shell command         | *(optional)* | Only for standalone use; with `%command%` Steam provides the command |
 
 ### Value meanings
 
@@ -159,8 +158,8 @@ ENTRY_HDR="on"
 ENTRY_VRR="passthrough"
 EXIT_HDR="off"
 EXIT_VRR="passthrough"
-COMMAND="mpv --fullscreen /home/jinx/movies/mymovie.mkv"
 ```
+Run with: `kds-launch mpv` (execs `mpv`) or pass args directly: `kds-launch mpv mpv --fullscreen /path/to/file`
 
 ---
 

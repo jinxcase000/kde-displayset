@@ -45,7 +45,7 @@ kde-displayset v${KDS_VERSION}
 Usage:
   kds-launch %command%              Auto-detect config from launcher env vars, pass through command
   kds-launch=myapp %command%        Force a named config, pass through command
-  kds-launch vlc                    Standalone app: find vlc.conf or NAME=vlc, run COMMAND from config
+  kds-launch vlc                    Standalone app: find vlc.conf or NAME=vlc, auto-generate launch command
   kds-launch --list                 List all configs
   kds-launch --status               Show current HDR and VRR state
   kds-launch --help                 Show this help
@@ -176,7 +176,6 @@ load_config() {
     ENTRY_VRR="passthrough"
     EXIT_HDR="restore"
     EXIT_VRR="restore"
-    COMMAND=""
     APPLY_MODE="combined"   # combined = one atomic call; separate = two calls
 
     # shellcheck source=/dev/null  # user config file, not statically known
@@ -213,11 +212,22 @@ if [[ "$SELF" == kds-launch=* ]]; then
     FORCED_NAME="${SELF#kds-launch=}"
     MODE="forced"
     PASSTHROUGH_CMD=("$@")
-elif [[ "$FIRST" == /* || "$FIRST" == ./* || "$FIRST" == *" "* ]] || \
-     { [[ $# -gt 1 ]] && [[ "$2" == /* || "$2" == env || "$2" == /usr/* ]]; }; then
-    # Looks like %command% was passed (first arg is a path or env)
+elif [[ "$FIRST" == /* || "$FIRST" == ./* || "$FIRST" == *" "* ]]; then
+    # First arg is already a path → pure auto mode
     MODE="auto"
     PASSTHROUGH_CMD=("$@")
+elif [[ $# -gt 1 ]] && [[ "$2" == /* || "$2" == env || "$2" == /usr/* ]]; then
+    if [[ "$FIRST" == "env" ]]; then
+        # env /path/to/game … → auto mode (Steam runtime wrapper)
+        MODE="auto"
+        PASSTHROUGH_CMD=("$@")
+    else
+        # kds-launch NAME %command% → forced mode, NAME stripped from passthrough
+        MODE="forced"
+        FORCED_NAME="$FIRST"
+        shift
+        PASSTHROUGH_CMD=("$@")
+    fi
 else
     # Standalone: kds-launch vlc
     MODE="standalone"
@@ -262,12 +272,33 @@ load_config
 if [[ ${#PASSTHROUGH_CMD[@]} -gt 0 ]]; then
     # Steam/Heroic: %command% was passed in, use it
     RUN_CMD=("${PASSTHROUGH_CMD[@]}")
-elif [[ -n "$COMMAND" ]]; then
-    # Standalone: use COMMAND from config
-    RUN_CMD=("bash" "-c" "$COMMAND")
 else
-    echo "[kds] ERROR: No command to run. Set COMMAND in config or use with %command%." >&2
-    exit 1
+    # Standalone: auto-generate from LAUNCHER + LAUNCHER_ID, or fall back to
+    # running the config name as the executable (e.g. kds-launch vlc → exec vlc)
+    case "${LAUNCHER:-}" in
+        steam)
+            if [[ -z "${LAUNCHER_ID:-}" ]]; then
+                echo "[kds] ERROR: LAUNCHER=steam but LAUNCHER_ID is not set in config." >&2
+                exit 1
+            fi
+            RUN_CMD=("steam" "steam://rungameid/${LAUNCHER_ID}")
+            ;;
+        heroic)
+            if [[ -z "${LAUNCHER_ID:-}" ]]; then
+                echo "[kds] ERROR: LAUNCHER=heroic but LAUNCHER_ID is not set in config." >&2
+                exit 1
+            fi
+            RUN_CMD=("xdg-open" "heroic://launch/${LAUNCHER_ID}")
+            ;;
+        none|"")
+            # No launcher — use the config name as the executable
+            RUN_CMD=("${FORCED_NAME}")
+            ;;
+        *)
+            echo "[kds] ERROR: Unknown LAUNCHER '${LAUNCHER}'. Cannot auto-generate launch command." >&2
+            exit 1
+            ;;
+    esac
 fi
 
 # ---------------------------------------------------------------------------
